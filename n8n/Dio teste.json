@@ -1,0 +1,292 @@
+{
+  "name": "Dio teste",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "Cliente",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -32,
+        -80
+      ],
+      "id": "d5ade4cd-1e71-4a01-916f-9a515a423625",
+      "name": "Webhook",
+      "webhookId": "25b9b729-ce73-4ad5-bd4b-1ccec48244d2"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2368,
+        -192
+      ],
+      "id": "d7258c6b-d81c-453c-9ddc-015913d30c2e",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        -16
+      ],
+      "id": "9a59ee4e-472f-4876-84ec-f2640d5e8e7a",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CSV como texto vindo do HTTP Request\nconst csvRaw = $json.data ?? $json.body ?? $json;\n\nconst text = (typeof csvRaw === \"string\") ? csvRaw : JSON.stringify(csvRaw);\n\nconst lines = text.split(/\\r?\\n/).map(l => l.trim()).filter(Boolean);\n\nconst headers = lines[0].split(\",\").map(h => h.trim());\n\nconst investimentos = lines.slice(1).map(line => {\n  const cols = line.split(\",\").map(c => c.trim());\n  const obj = {};\n\n  headers.forEach((h, i) => {\n    obj[h] = cols[i] ?? \"\";\n  });\n\n  // normaliza mínimo para número\n  obj.minimo = Number(String(obj.minimo).replace(/[^\\d]/g, \"\")) || 0;\n\n  return obj;\n});\n\nreturn [{ json: { investimentos } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -16
+      ],
+      "id": "ec017b6b-8eb9-47c5-afa5-01218d73232c",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        672,
+        -176
+      ],
+      "id": "aeea50b4-4e8e-4d05-a602-437fca7644ba",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const clientes = $json.body?.clientes || [];\nconst investimentos = $json.investimentos || [];\n\nconst resultado = [];\n\nfor (const cliente of clientes) {\n\n  // Encontra investimentos compatíveis com o perfil do cliente\n  const recomendados = investimentos.filter(\n    investimento => investimento.perfil === cliente.perfil\n  );\n\n  // Monta a lista de investimentos\n  const listaInvestimentos = recomendados\n    .map(inv => {\n      return `• ${inv.produto} — mínimo: R$ ${inv.minimo} — rentabilidade: ${inv.rentabilidade}`;\n    })\n    .join('\\n');\n\n\n  // =====================================================\n  // OPÇÃO 1 — MENSAGEM PROFISSIONAL\n  // =====================================================\n\n  const mensagem1 = `\nOlá, ${cliente.nome}!\n\nIdentificamos algumas opções de investimento compatíveis com o seu perfil de investidor: ${cliente.perfil}.\n\nConsiderando seu saldo atual de ${cliente.saldo}, apresentamos abaixo as opções disponíveis para esse perfil:\n\n${listaInvestimentos}\n\nEssas informações são apresentadas exclusivamente para fins informativos e não constituem recomendação financeira.\n\nAtenciosamente,\nEquipe de Investimentos\n  `.trim();\n\n\n  // =====================================================\n  // OPÇÃO 2 — MENSAGEM CONSULTIVA\n  // =====================================================\n\n  const mensagem2 = `\nOlá, ${cliente.nome}! Tudo bem?\n\nAnalisamos seu perfil de investidor, classificado como ${cliente.perfil}, e encontramos algumas opções de investimento que podem ser consideradas dentro desse perfil.\n\nSeu saldo informado atualmente é de ${cliente.saldo}.\n\nConfira algumas das opções encontradas:\n\n${listaInvestimentos}\n\nAntes de realizar qualquer investimento, avalie seus objetivos, prazo e tolerância a riscos.\n\nEstas informações são apenas informativas e não constituem recomendação financeira.\n\nUm abraço,\nEquipe de Investimentos\n  `.trim();\n\n\n  // =====================================================\n  // OPÇÃO 3 — MENSAGEM DIRETA\n  // =====================================================\n\n  const mensagem3 = `\nOlá, ${cliente.nome}!\n\nSeu perfil é ${cliente.perfil} e seu saldo atual é de ${cliente.saldo}.\n\nEncontramos estas opções compatíveis com seu perfil:\n\n${listaInvestimentos}\n\nConsulte as condições e avalie os riscos antes de investir.\n\nInformações apenas para fins informativos, não constituindo recomendação financeira.\n\nEquipe de Investimentos\n  `.trim();\n\n\n  // =====================================================\n  // RESULTADO\n  // =====================================================\n\n  resultado.push({\n    json: {\n      nome: cliente.nome,\n      email: cliente.email,\n      saldo: cliente.saldo,\n      perfil: cliente.perfil,\n\n      investimentos_recomendados: recomendados,\n\n      assunto: `Opções de investimento para ${cliente.nome}`,\n\n      // As três opções ficam disponíveis\n      mensagem_1: mensagem1,\n      mensagem_2: mensagem2,\n      mensagem_3: mensagem3,\n\n      // Mensagem padrão que será usada inicialmente\n      mensagem: mensagem1\n    }\n  });\n}\n\nreturn resultado;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -176
+      ],
+      "id": "e2856ab2-e814-418c-97ec-a4bf24b21d4a",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recebe todos os clientes vindos do Code in JavaScript1\nconst entradas = $input.all();\n\n\n// =====================================================\n// CONVERTER VALOR EM REAIS PARA NÚMERO\n// Exemplo:\n// \"R$ 12.500,00\" -> 12500\n// \"R$ 3.200,00\"  -> 3200\n// =====================================================\n\nfunction parseBRL(valor) {\n  if (!valor) return 0;\n\n  const s = String(valor)\n    .replace(\"R$\", \"\")\n    .replace(/\\./g, \"\")\n    .replace(\",\", \".\")\n    .replace(/[^\\d.-]/g, \"\")\n    .trim();\n\n  const n = Number(s);\n\n  return Number.isFinite(n) ? n : 0;\n}\n\n\n// =====================================================\n// PROCESSAR CADA CLIENTE\n// =====================================================\n\nconst out = entradas.map(item => {\n\n  const c = item.json;\n\n\n  // Saldo\n  const saldoTexto = c.saldo ?? \"\";\n\n  const saldoNum =\n    c.saldo_num ?? parseBRL(saldoTexto);\n\n\n  // Investimentos encontrados\n  const investimentos =\n    Array.isArray(c.investimentos_recomendados)\n      ? c.investimentos_recomendados\n      : [];\n\n\n  // ===================================================\n  // TRÊS MENSAGENS\n  // ===================================================\n\n  const mensagem1 = c.mensagem_1 ?? \"\";\n  const mensagem2 = c.mensagem_2 ?? \"\";\n  const mensagem3 = c.mensagem_3 ?? \"\";\n\n\n  // ===================================================\n  // ESCOLHER UMA DAS 3 MENSAGENS\n  // ===================================================\n\n  const mensagens = [\n    mensagem1,\n    mensagem2,\n    mensagem3\n  ].filter(Boolean);\n\n\n  const mensagemEscolhida =\n    mensagens.length > 0\n      ? mensagens[Math.floor(Math.random() * mensagens.length)]\n      : \"\";\n\n\n  // ===================================================\n  // RETORNAR CLIENTE\n  // ===================================================\n\n  return {\n    json: {\n\n      // Dados do cliente\n      nome: c.nome ?? \"\",\n      email: c.email ?? \"\",\n      perfil: c.perfil ?? \"\",\n\n      // Saldo\n      saldo_texto: saldoTexto,\n      saldo_num: saldoNum,\n\n      // Investimentos\n      investimentos_recomendados: investimentos,\n\n      quantidade_investimentos: investimentos.length,\n\n      // Assunto\n      assunto:\n        c.assunto ??\n        `Opções de investimento para ${c.nome ?? \"cliente\"}`,\n\n      // As três opções\n      mensagem_1: mensagem1,\n      mensagem_2: mensagem2,\n      mensagem_3: mensagem3,\n\n      // Mensagem escolhida aleatoriamente\n      mensagem_escolhida: mensagemEscolhida,\n\n      // Mantém também a mensagem original\n      mensagem: c.mensagem ?? mensagemEscolhida\n    }\n  };\n});\n\n\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        -176
+      ],
+      "id": "a3f95abf-f084-4709-b11d-be8fccf3b735",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "llama3.2:latest",
+          "mode": "list",
+          "cachedResultName": "llama3.2:latest"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Crie um e-mail informativo curto.\n\nCliente:\nNome: {{ $json.nome }}\nPerfil: {{ $json.perfil }}\nSaldo: {{ $json.saldo_texto }}\n\nOpções disponíveis:\n{{ JSON.stringify($json.investimentos_recomendados) }}\n\nREGRAS:\n- Comece com \"Olá, [nome]!\"\n- Diga que foram encontradas opções compatíveis com o perfil.\n- Liste somente os produtos fornecidos.\n- Nunca diga que o cliente já possui esses investimentos.\n- Nunca invente informações.\n- Não prometa rentabilidade.\n- Máximo 50 palavras.\n- Informe que o conteúdo é apenas informativo.\n- Retorne somente o texto do e-mail."
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.02,
+          "num_predict": 80
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.ollama",
+      "typeVersion": 1,
+      "position": [
+        1504,
+        -176
+      ],
+      "id": "9ec04c4b-7ad2-48ad-b61d-2ea9b2c3c377",
+      "name": "Message a model",
+    },
+    {
+      "parameters": {
+        "jsCode": "const entradas = $input.all();\n\nconst clientes = $(\"Code in JavaScript2\").all();\n\nreturn entradas.map((item, index) => {\n  const cliente = clientes[index]?.json ?? {};\n\n  return {\n    json: {\n      email: cliente.email ?? \"\",\n      nome: cliente.nome ?? \"\",\n      assunto: cliente.assunto ?? \"Opções de investimento\",\n      mensagem: item.json.content ?? \"\"\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1856,
+        -176
+      ],
+      "id": "3ef00758-9111-40f4-ad76-9a0d40c990e2",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "fromEmail": "authtest791@gmail.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.assunto }}",
+        "html": "={{ $json.mensagem }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2064,
+        -176
+      ],
+      "id": "a15fe326-a868-4849-ad4b-e61f86d31914",
+      "name": "Send an Email",
+      "webhookId": "b46fd21f-6c0e-4a6a-a45f-91b19f6874cf",
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send an Email": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "0a55370b-711c-4ad7-9210-2d2ccd1f2924",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+  },
+  "nodeGroups": [],
+  "id": "K4cTz8jrHZaxFswO",
+  "tags": []
+}
